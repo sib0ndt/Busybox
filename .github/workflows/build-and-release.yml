@@ -1,0 +1,151 @@
+name: Build and Release uInitrd
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: Build and release even when latest BusyBox version is already released
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 */6 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: busybox-auto-release
+  cancel-in-progress: false
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.compare.outputs.should_build }}
+      busybox_version: ${{ steps.busybox.outputs.version }}
+    steps:
+      - name: Detect latest BusyBox version
+        id: busybox
+        run: |
+          set -euo pipefail
+          version="$(curl -fsSL https://busybox.net/downloads/ \
+            | grep -oE 'busybox-[0-9]+\.[0-9]+\.[0-9]+\.tar\.bz2' \
+            | sed -E 's/^busybox-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.bz2$/\1/' \
+            | sort -uV \
+            | tail -n1)"
+
+          if [ -z "${version}" ]; then
+            echo "Failed to detect latest BusyBox version" >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Latest BusyBox version: ${version}"
+
+      - name: Read latest release tag from this repository
+        id: latest_release
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            try {
+              const rel = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+              return rel.data.tag_name || "";
+            } catch (error) {
+              if (error.status === 404) {
+                return "";
+              }
+              throw error;
+            }
+
+      - name: Compare upstream version with latest release
+        id: compare
+        env:
+          BUSYBOX_VERSION: ${{ steps.busybox.outputs.version }}
+          LATEST_RELEASE_TAG: ${{ steps.latest_release.outputs.result }}
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_build || 'false' }}
+        run: |
+          set -euo pipefail
+          expected_tag="busybox-v${BUSYBOX_VERSION}"
+
+          if [ "${FORCE_BUILD}" = "true" ]; then
+            echo "should_build=true" >> "${GITHUB_OUTPUT}"
+            echo "Force build requested from workflow_dispatch"
+          elif [ "${LATEST_RELEASE_TAG}" = "${expected_tag}" ]; then
+            echo "should_build=false" >> "${GITHUB_OUTPUT}"
+            echo "No BusyBox update detected (${expected_tag})"
+          else
+            echo "should_build=true" >> "${GITHUB_OUTPUT}"
+            echo "BusyBox update found: ${LATEST_RELEASE_TAG:-none} -> ${expected_tag}"
+          fi
+
+  build-and-release:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils-aarch64-linux-gnu bzip2 cpio curl gcc-aarch64-linux-gnu libc6-dev-arm64-cross rsync u-boot-tools
+
+      - name: Build initramfs and uInitrd
+        env:
+          BUSYBOX_VERSION: ${{ needs.check-upstream.outputs.busybox_version }}
+          TARGET_KERNEL_ARCH: arm64
+          CROSS_COMPILE: aarch64-linux-gnu-
+          UBOOT_ARCH: arm64
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ci/build-initramfs.sh
+          scripts/ci/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: busybox-uinitrd-${{ needs.check-upstream.outputs.busybox_version }}
+          path: |
+            release/initramfs
+            release/uInitrd
+            release/uInitrd.tar.gz
+            release/SHA256SUMS
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: busybox-v${{ needs.check-upstream.outputs.busybox_version }}
+          name: BusyBox v${{ needs.check-upstream.outputs.busybox_version }} uInitrd
+          body: |
+            Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
+
+            Included artifacts:
+            - initramfs
+            - uInitrd
+            - uInitrd.tar.gz
+            - SHA256SUMS
+
+            The init script and ramdisk scripts are sourced from this repository.
+          files: |
+            release/initramfs
+            release/uInitrd
+            release/uInitrd.tar.gz
+            release/SHA256SUMS
+
+  no-update:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.should_build != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report no upstream update
+        run: echo "No new BusyBox release found. Build and release skipped."
