@@ -70,6 +70,15 @@ else
   yes "" | make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" oldconfig
   set -o pipefail
 fi
+
+# Newer Linux UAPI headers can miss legacy CBQ symbols required by BusyBox tc.
+# Disable tc applet to keep CI builds stable across runner environments.
+if grep -q '^CONFIG_TC=y' "${BUSYBOX_SRC}/.config"; then
+  sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' "${BUSYBOX_SRC}/.config"
+elif ! grep -q '^# CONFIG_TC is not set' "${BUSYBOX_SRC}/.config"; then
+  echo '# CONFIG_TC is not set' >> "${BUSYBOX_SRC}/.config"
+fi
+
 make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" -j"$(nproc)"
 
 echo "[5/7] Installing BusyBox applets into rootfs"
