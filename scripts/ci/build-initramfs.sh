@@ -53,6 +53,7 @@ echo "[3/7] Copying ramdisk template from repository"
 rsync -a \
   --exclude='.git' \
   --exclude='.github' \
+  --exclude='.vscode' \
   --exclude='release' \
   --exclude='scripts/ci' \
   "${REPO_ROOT}/" "${ROOTFS_DIR}/"
