@@ -101,7 +101,7 @@ chmod 0755 "${ROOTFS_DIR}/init"
 echo "[6/7] Creating initramfs and uInitrd"
 (
   cd "${ROOTFS_DIR}"
-  find . -print0 | LC_ALL=C sort -z | cpio --null --create --format=newc --owner=0:0 > "${OUTPUT_DIR}/initramfs"
+  find . -print0 | LC_ALL=C sort -z | cpio --null --create --format=newc --owner=0:0 |gzip -9 > "${OUTPUT_DIR}/initramfs"
 )
 mkimage -n 'Linux' -A "${UBOOT_ARCH}" -O linux -T ramdisk -C none -d "${OUTPUT_DIR}/initramfs" "${OUTPUT_DIR}/uInitrd"
 
