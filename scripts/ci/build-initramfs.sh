@@ -24,6 +24,17 @@ if [[ -n "${CROSS_COMPILE}" ]]; then
   MAKE_ARGS+=("CROSS_COMPILE=${CROSS_COMPILE}")
 fi
 
+disable_config_opt() {
+  local config_key="$1"
+  local cfg_file="$2"
+
+  if grep -q "^${config_key}=y" "${cfg_file}"; then
+    sed -i "s/^${config_key}=y/# ${config_key} is not set/" "${cfg_file}"
+  elif ! grep -q "^# ${config_key} is not set" "${cfg_file}"; then
+    echo "# ${config_key} is not set" >> "${cfg_file}"
+  fi
+}
+
 cleanup() {
   rm -rf "${WORK_DIR}"
 }
@@ -73,11 +84,12 @@ fi
 
 # Newer Linux UAPI headers can miss legacy CBQ symbols required by BusyBox tc.
 # Disable tc applet to keep CI builds stable across runner environments.
-if grep -q '^CONFIG_TC=y' "${BUSYBOX_SRC}/.config"; then
-  sed -i 's/^CONFIG_TC=y/# CONFIG_TC is not set/' "${BUSYBOX_SRC}/.config"
-elif ! grep -q '^# CONFIG_TC is not set' "${BUSYBOX_SRC}/.config"; then
-  echo '# CONFIG_TC is not set' >> "${BUSYBOX_SRC}/.config"
-fi
+disable_config_opt "CONFIG_TC" "${BUSYBOX_SRC}/.config"
+
+# Some BusyBox SHA hardware-accel code paths are not portable across all
+# cross-toolchains and can reference symbols unavailable on ARM64 builds.
+disable_config_opt "CONFIG_SHA1_HWACCEL" "${BUSYBOX_SRC}/.config"
+disable_config_opt "CONFIG_SHA256_HWACCEL" "${BUSYBOX_SRC}/.config"
 
 make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" -j"$(nproc)"
 
