@@ -62,7 +62,12 @@ if grep -q '^# CONFIG_STATIC is not set' "${BUSYBOX_SRC}/.config"; then
 elif ! grep -q '^CONFIG_STATIC=y' "${BUSYBOX_SRC}/.config"; then
   echo 'CONFIG_STATIC=y' >> "${BUSYBOX_SRC}/.config"
 fi
-make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" olddefconfig
+if make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" olddefconfig >/dev/null 2>&1; then
+  echo "Applied BusyBox olddefconfig"
+else
+  echo "olddefconfig is unavailable; using non-interactive oldconfig"
+  yes "" | make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" oldconfig
+fi
 make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" -j"$(nproc)"
 
 echo "[5/7] Installing BusyBox applets into rootfs"
