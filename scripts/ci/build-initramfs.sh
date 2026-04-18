@@ -66,7 +66,9 @@ if make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" olddefconfig >/dev/null 2>&1; then
   echo "Applied BusyBox olddefconfig"
 else
   echo "olddefconfig is unavailable; using non-interactive oldconfig"
+  set +o pipefail
   yes "" | make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" oldconfig
+  set -o pipefail
 fi
 make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" -j"$(nproc)"
 
