@@ -13,7 +13,7 @@ CROSS_COMPILE="${CROSS_COMPILE:-}"
 UBOOT_ARCH="${UBOOT_ARCH:-arm64}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 ROOTFS_DIR="${WORK_DIR}/rootfs"
 BUSYBOX_ARCHIVE="${WORK_DIR}/busybox-${BUSYBOX_VERSION}.tar.bz2"
