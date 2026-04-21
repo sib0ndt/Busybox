@@ -19,6 +19,8 @@ ROOTFS_DIR="${WORK_DIR}/rootfs"
 BUSYBOX_ARCHIVE="${WORK_DIR}/busybox-${BUSYBOX_VERSION}.tar.bz2"
 BUSYBOX_URL="https://busybox.net/downloads/busybox-${BUSYBOX_VERSION}.tar.bz2"
 MAKE_ARGS=("ARCH=${TARGET_KERNEL_ARCH}")
+TARGET_CC="${CROSS_COMPILE:+${CROSS_COMPILE}}gcc"
+TARGET_CFLAGS=(-Os -static -D_FILE_OFFSET_BITS=64)
 
 if [[ -n "${CROSS_COMPILE}" ]]; then
   MAKE_ARGS+=("CROSS_COMPILE=${CROSS_COMPILE}")
@@ -33,6 +35,18 @@ disable_config_opt() {
   elif ! grep -q "^# ${config_key} is not set" "${cfg_file}"; then
     echo "# ${config_key} is not set" >> "${cfg_file}"
   fi
+}
+
+build_target_helper() {
+  local src_file="$1"
+  local out_file="$2"
+
+  if [[ ! -f "${src_file}" ]]; then
+    echo "Required helper source was not found at ${src_file}" >&2
+    exit 1
+  fi
+
+  "${TARGET_CC}" "${TARGET_CFLAGS[@]}" -o "${out_file}" "${src_file}"
 }
 
 cleanup() {
@@ -97,6 +111,9 @@ make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" -j"$(nproc)"
 echo "[5/7] Installing BusyBox applets into rootfs"
 make -C "${BUSYBOX_SRC}" "${MAKE_ARGS[@]}" CONFIG_PREFIX="${ROOTFS_DIR}" install
 chmod 0755 "${ROOTFS_DIR}/init"
+build_target_helper "${REPO_ROOT}/scripts/growpart-mbr.c" "${ROOTFS_DIR}/sbin/growpart-mbr"
+build_target_helper "${REPO_ROOT}/scripts/resize-ext.c" "${ROOTFS_DIR}/sbin/resize-ext"
+chmod 0755 "${ROOTFS_DIR}/sbin/growpart-mbr" "${ROOTFS_DIR}/sbin/resize-ext"
 
 echo "[6/7] Creating initramfs and uInitrd"
 (

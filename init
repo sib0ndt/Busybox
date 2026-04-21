@@ -37,6 +37,8 @@ ROOTMODE=ro
 ROOTDELAY=0
 ROOTWAIT=0
 REAL_INIT=/sbin/init
+AUTORESIZE_ROOT=1
+MOUNTED_ROOTFSTYPE=
 
 for arg in $CMDLINE; do
 	case "$arg" in
@@ -48,6 +50,8 @@ for arg in $CMDLINE; do
 		rw) ROOTMODE=rw ;;
 		ro) ROOTMODE=ro ;;
 		init=*) REAL_INIT="${arg#init=}" ;;
+		rootfs.autoresize|rootfs.autoresize=1|rootfs.autoresize=yes|rootfs.autoresize=true) AUTORESIZE_ROOT=1 ;;
+		rootfs.autoresize=0|rootfs.autoresize=no|rootfs.autoresize=false|rootfs.noautoresize) AUTORESIZE_ROOT=0 ;;
 		rd.break|break=init|uinitrd.break) exec sh ;;
 	esac
 done
@@ -124,34 +128,149 @@ wait_for_root() {
 	done
 }
 
+detect_mounted_rootfstype() {
+	while read dev mp fs rest; do
+		[ "$mp" = "/newroot" ] && {
+			echo "$fs"
+			return 0
+		}
+	done < /proc/mounts
+	return 1
+}
+
 mount_root() {
 	dev="$1"
-	opts="$ROOTMODE"
+	mode="${2:-$ROOTMODE}"
+	opts="$mode"
 	[ -n "$ROOTFLAGS" ] && opts="$opts,$ROOTFLAGS"
 
 	if [ -n "$ROOTFSTYPE" ] && [ "$ROOTFSTYPE" != auto ]; then
-		mount -t "$ROOTFSTYPE" -o "$opts" "$dev" /newroot
+		mount -t "$ROOTFSTYPE" -o "$opts" "$dev" /newroot && {
+			MOUNTED_ROOTFSTYPE="$ROOTFSTYPE"
+			return 0
+		}
 		return $?
 	fi
 
 	for fs in ext4 btrfs ext3 ext2 auto; do
 		log "Trying $fs on $dev"
-		mount -t "$fs" -o "$opts" "$dev" /newroot 2>/run/mount.err && return 0
+		mount -t "$fs" -o "$opts" "$dev" /newroot 2>/run/mount.err || continue
+		MOUNTED_ROOTFSTYPE="$fs"
+		[ "$fs" != auto ] || MOUNTED_ROOTFSTYPE="$(detect_mounted_rootfstype)"
+		return 0
 	done
 	return 1
 }
 
+remount_root() {
+	mode="$1"
+	opts="$mode"
+	[ -n "$ROOTFLAGS" ] && opts="$opts,$ROOTFLAGS"
+	mount -o "remount,$opts" /newroot
+}
+
+maybe_grow_root_partition() {
+	dev="$1"
+	[ "$AUTORESIZE_ROOT" = 1 ] || return 0
+	[ -x /sbin/growpart-mbr ] || {
+		log "Partition auto-resize helper is missing; skipping"
+		return 0
+	}
+
+	log "Checking whether root partition can be expanded"
+	/sbin/growpart-mbr "$dev"
+	rc=$?
+	case "$rc" in
+		0)
+			log "Root partition already occupies the available disk space"
+			;;
+		10)
+			log "Expanded root partition to the end of the disk"
+			mdev -s 2>/dev/null
+			sleep 1
+			;;
+		11)
+			log "Skipping partition auto-resize: unsupported disk layout"
+			;;
+		13)
+			log "Partition table was updated, but the kernel refused to reread it; a reboot may be needed before filesystem resize"
+			;;
+		*)
+			log "Root partition auto-resize failed with exit code $rc"
+			;;
+	esac
+	return 0
+}
+
+maybe_resize_root_filesystem() {
+	dev="$1"
+	[ "$AUTORESIZE_ROOT" = 1 ] || return 0
+
+	case "$MOUNTED_ROOTFSTYPE" in
+		ext2|ext3|ext4)
+			[ -x /sbin/resize-ext ] || {
+				log "Filesystem auto-resize helper is missing; skipping"
+				return 0
+			}
+
+			restore_ro=0
+			if [ "$ROOTMODE" = ro ]; then
+				log "Temporarily remounting root read-write for filesystem resize"
+				remount_root rw || {
+					log "Failed to remount root read-write; skipping filesystem resize"
+					return 0
+				}
+				restore_ro=1
+			fi
+
+			/sbin/resize-ext "$dev" /newroot
+			rc=$?
+			case "$rc" in
+				0)
+					log "Root filesystem already occupies the available partition space"
+					;;
+				10)
+					log "Expanded root filesystem to use the full partition"
+					;;
+				11)
+					log "Skipping filesystem auto-resize: unsupported filesystem state"
+					;;
+				*)
+					log "Root filesystem auto-resize failed with exit code $rc"
+					;;
+			esac
+
+			if [ "$restore_ro" = 1 ]; then
+				remount_root ro || log "Failed to remount root read-only after filesystem resize"
+			fi
+			;;
+		*)
+			log "Auto-resize currently supports ext2/ext3/ext4 roots only (detected ${MOUNTED_ROOTFSTYPE:-unknown})"
+			;;
+	esac
+	return 0
+}
+
 log "BusyBox initramfs for Amlogic"
 log "cmdline: $CMDLINE"
+if [ "$AUTORESIZE_ROOT" = 1 ]; then
+	log "rootfs auto-resize: enabled"
+else
+	log "rootfs auto-resize: disabled"
+fi
 
 ROOTDEV="$(wait_for_root)" || panic "Root device not found. root='$ROOT'"
 log "root device: $ROOTDEV"
+
+maybe_grow_root_partition "$ROOTDEV"
 
 mount_root "$ROOTDEV" || {
 	log "Mount failed:"
 	cat /run/mount.err 2>/dev/null
 	panic "Unable to mount root filesystem"
 }
+
+maybe_resize_root_filesystem "$ROOTDEV"
 
 if [ ! -e "/newroot$REAL_INIT" ]; then
 	log "Requested init '$REAL_INIT' not found, falling back to /sbin/init"
