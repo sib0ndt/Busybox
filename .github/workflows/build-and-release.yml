@@ -133,7 +133,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: busybox-v${{ needs.check-upstream.outputs.busybox_version }}
-          name: BusyBox v${{ needs.check-upstream.outputs.busybox_version }} uInitrd
+          name: BusyBox v${{ needs.check-upstream.outputs.busybox_version }}
           body: |
             Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
 
