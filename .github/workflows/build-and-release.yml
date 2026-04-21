@@ -127,10 +127,7 @@ jobs:
         with:
           name: busybox-uinitrd-${{ needs.check-upstream.outputs.busybox_version }}
           path: |
-            release/initramfs
             release/uInitrd
-            release/uInitrd.tar.gz
-            release/SHA256SUMS
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
