@@ -119,8 +119,8 @@ jobs:
           UBOOT_ARCH: arm64
         run: |
           set -euo pipefail
-          chmod +x scripts/ci/build-initramfs.sh
-          scripts/ci/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release"
+          chmod +x scripts/build-initramfs.sh
+          scripts/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
