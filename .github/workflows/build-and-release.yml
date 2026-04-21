@@ -141,17 +141,11 @@ jobs:
             Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
 
             Included artifacts:
-            - initramfs
             - uInitrd
-            - uInitrd.tar.gz
-            - SHA256SUMS
 
             The init script and ramdisk scripts are sourced from this repository.
           files: |
-            release/initramfs
             release/uInitrd
-            release/uInitrd.tar.gz
-            release/SHA256SUMS
 
   no-update:
     needs: check-upstream
