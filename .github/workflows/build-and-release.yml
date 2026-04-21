@@ -1,4 +1,4 @@
-name: Build and Release uInitrd
+name: Build and Release initramfs and uInitrd
 
 on:
   push:
@@ -125,8 +125,9 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: busybox-uinitrd-${{ needs.check-upstream.outputs.busybox_version }}
+          name: busybox-initrd-assets-${{ needs.check-upstream.outputs.busybox_version }}
           path: |
+            release/initramfs
             release/uInitrd
 
       - name: Create GitHub release
@@ -138,10 +139,12 @@ jobs:
             Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
 
             Included artifacts:
+            - initramfs
             - uInitrd
 
             The init script and ramdisk scripts are sourced from this repository.
           files: |
+            release/initramfs
             release/uInitrd
 
   no-update:
