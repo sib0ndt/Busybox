@@ -83,11 +83,16 @@ jobs:
           BUSYBOX_VERSION: ${{ steps.busybox.outputs.version }}
           LATEST_RELEASE_TAG: ${{ steps.latest_release.outputs.tag_name }}
           FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_build || 'false' }}
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA_SHORT: ${{ github.sha }}
         run: |
           set -euo pipefail
           expected_tag="busybox-v${BUSYBOX_VERSION}"
 
-          if [ "${FORCE_BUILD}" = "true" ]; then
+          if [ "${EVENT_NAME}" = "push" ]; then
+            echo "should_build=true" >> "${GITHUB_OUTPUT}"
+            echo "Repository changes detected from push; build requested"
+          elif [ "${FORCE_BUILD}" = "true" ]; then
             echo "should_build=true" >> "${GITHUB_OUTPUT}"
             echo "Force build requested from workflow_dispatch"
           elif [ "${LATEST_RELEASE_TAG}" = "${expected_tag}" ]; then
