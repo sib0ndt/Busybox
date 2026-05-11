@@ -251,7 +251,7 @@ maybe_resize_root_filesystem() {
 	return 0
 }
 
-log "BusyBox initramfs for Amlogic"
+log "Initramfs by @sib0ndt"
 log "cmdline: $CMDLINE"
 if [ "$AUTORESIZE_ROOT" = 1 ]; then
 	log "rootfs auto-resize: enabled"
