@@ -107,6 +107,19 @@ jobs:
     needs: check-upstream
     if: needs.check-upstream.outputs.should_build == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - arch: arm64
+            target_kernel_arch: arm64
+            cross_compile: aarch64-linux-gnu-
+            uboot_arch: arm64
+          - arch: arm
+            target_kernel_arch: arm
+            cross_compile: arm-linux-gnueabihf-
+            uboot_arch: arm
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -114,26 +127,28 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential binutils-aarch64-linux-gnu bzip2 cpio curl gcc-aarch64-linux-gnu libc6-dev-arm64-cross rsync u-boot-tools
+          sudo apt-get install -y build-essential binutils-aarch64-linux-gnu binutils-arm-linux-gnueabihf bzip2 cpio curl gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf libc6-dev-arm64-cross libc6-dev-armhf-cross rsync u-boot-tools
 
       - name: Build initramfs and uInitrd
         env:
           BUSYBOX_VERSION: ${{ needs.check-upstream.outputs.busybox_version }}
-          TARGET_KERNEL_ARCH: arm64
-          CROSS_COMPILE: aarch64-linux-gnu-
-          UBOOT_ARCH: arm64
+          TARGET_KERNEL_ARCH: ${{ matrix.target_kernel_arch }}
+          CROSS_COMPILE: ${{ matrix.cross_compile }}
+          UBOOT_ARCH: ${{ matrix.uboot_arch }}
         run: |
           set -euo pipefail
           chmod +x scripts/build-initramfs.sh
-          scripts/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release"
+          scripts/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release/${{ matrix.arch }}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: busybox-initrd-assets-${{ needs.check-upstream.outputs.busybox_version }}
+          name: busybox-initrd-assets-${{ needs.check-upstream.outputs.busybox_version }}-${{ matrix.arch }}
           path: |
-            release/initramfs
-            release/uInitrd
+            release/${{ matrix.arch }}/initramfs
+            release/${{ matrix.arch }}/uInitrd
+            release/${{ matrix.arch }}/uInitrd.tar.gz
+            release/${{ matrix.arch }}/SHA256SUMS
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -144,13 +159,21 @@ jobs:
             Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
 
             Included artifacts:
-            - initramfs
-            - uInitrd
+            - arm64/initramfs
+            - arm64/uInitrd
+            - arm64/uInitrd.tar.gz
+            - arm64/SHA256SUMS
+            - arm/initramfs
+            - arm/uInitrd
+            - arm/uInitrd.tar.gz
+            - arm/SHA256SUMS
 
             The init script and ramdisk scripts are sourced from this repository.
           files: |
-            release/initramfs
-            release/uInitrd
+            release/${{ matrix.arch }}/initramfs
+            release/${{ matrix.arch }}/uInitrd
+            release/${{ matrix.arch }}/uInitrd.tar.gz
+            release/${{ matrix.arch }}/SHA256SUMS
 
   no-update:
     needs: check-upstream
