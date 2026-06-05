@@ -140,15 +140,25 @@ jobs:
           chmod +x scripts/build-initramfs.sh
           scripts/build-initramfs.sh "${BUSYBOX_VERSION}" "${GITHUB_WORKSPACE}/release/${{ matrix.arch }}"
 
+      - name: Rename release assets
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/release/${{ matrix.arch }}"
+          mv initramfs "initramfs-${{ matrix.arch }}"
+          mv uInitrd "uInitrd-${{ matrix.arch }}"
+          mv uInitrd.tar.gz "uInitrd-${{ matrix.arch }}.tar.gz"
+          sha256sum "initramfs-${{ matrix.arch }}" "uInitrd-${{ matrix.arch }}" "uInitrd-${{ matrix.arch }}.tar.gz" > "SHA256SUMS-${{ matrix.arch }}"
+          rm SHA256SUMS
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: busybox-initrd-assets-${{ needs.check-upstream.outputs.busybox_version }}-${{ matrix.arch }}
           path: |
-            release/${{ matrix.arch }}/initramfs
-            release/${{ matrix.arch }}/uInitrd
-            release/${{ matrix.arch }}/uInitrd.tar.gz
-            release/${{ matrix.arch }}/SHA256SUMS
+            release/${{ matrix.arch }}/initramfs-${{ matrix.arch }}
+            release/${{ matrix.arch }}/uInitrd-${{ matrix.arch }}
+            release/${{ matrix.arch }}/uInitrd-${{ matrix.arch }}.tar.gz
+            release/${{ matrix.arch }}/SHA256SUMS-${{ matrix.arch }}
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -159,21 +169,21 @@ jobs:
             Automated build from BusyBox upstream version ${{ needs.check-upstream.outputs.busybox_version }}.
 
             Included artifacts:
-            - arm64/initramfs
-            - arm64/uInitrd
-            - arm64/uInitrd.tar.gz
-            - arm64/SHA256SUMS
-            - arm/initramfs
-            - arm/uInitrd
-            - arm/uInitrd.tar.gz
-            - arm/SHA256SUMS
+            - initramfs-arm64
+            - uInitrd-arm64
+            - uInitrd-arm64.tar.gz
+            - SHA256SUMS-arm64
+            - initramfs-arm
+            - uInitrd-arm
+            - uInitrd-arm.tar.gz
+            - SHA256SUMS-arm
 
             The init script and ramdisk scripts are sourced from this repository.
           files: |
-            release/${{ matrix.arch }}/initramfs
-            release/${{ matrix.arch }}/uInitrd
-            release/${{ matrix.arch }}/uInitrd.tar.gz
-            release/${{ matrix.arch }}/SHA256SUMS
+            release/${{ matrix.arch }}/initramfs-${{ matrix.arch }}
+            release/${{ matrix.arch }}/uInitrd-${{ matrix.arch }}
+            release/${{ matrix.arch }}/uInitrd-${{ matrix.arch }}.tar.gz
+            release/${{ matrix.arch }}/SHA256SUMS-${{ matrix.arch }}
 
   no-update:
     needs: check-upstream
